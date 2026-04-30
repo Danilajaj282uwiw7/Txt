@@ -10,16 +10,32 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install dependencies
+      - name: Install system deps
         run: |
           sudo apt update
-          sudo apt install -y python3-pip git zip unzip
-          pip install buildozer cython
+          sudo apt install -y \
+            python3-pip git zip unzip \
+            openjdk-17-jdk \
+            build-essential \
+            libffi-dev libssl-dev \
+            autoconf automake libtool \
+            zlib1g-dev cmake
+
+      - name: Upgrade pip
+        run: |
+          python3 -m pip install --upgrade pip
+
+      - name: Install buildozer
+        run: |
+          pip install cython buildozer
+
+      - name: Init buildozer
+        run: |
+          buildozer init
 
       - name: Build APK
         run: |
-          buildozer init || true
-          buildozer android debug
+          buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
