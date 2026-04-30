@@ -1,137 +1,67 @@
-// Project: DB2Text Lite // Updated with purple UI + footer credit
+import sqlite3
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from plyer import filechooser
+import os
 
-// ============================= // MainActivity.kt (UPDATED UI) // ============================= package com.db2text.lite
 
-import android.app.Activity import android.content.Intent import android.database.sqlite.SQLiteDatabase import android.graphics.Color import android.net.Uri import android.os.Bundle import android.view.Gravity import android.widget.* import androidx.appcompat.app.AppCompatActivity import java.io.File
+class Converter(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(orientation="vertical", **kwargs)
 
-class MainActivity : AppCompatActivity() {
+        self.label = Label(text="SQLite → TXT Converter", size_hint=(1, 0.2))
+        self.add_widget(self.label)
 
-private lateinit var status: TextView
-private var dbUri: Uri? = null
+        self.btn = Button(text="Выбрать .db файл", size_hint=(1, 0.2))
+        self.btn.bind(on_press=self.pick_file)
+        self.add_widget(self.btn)
 
-override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+    def pick_file(self, instance):
+        filechooser.open_file(on_selection=self.convert)
 
-    val mainLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setBackgroundColor(Color.parseColor("#1E1B2E"))
-        setPadding(32, 64, 32, 32)
-    }
+    def convert(self, selection):
+        if not selection:
+            return
 
-    val title = TextView(this).apply {
-        text = "DB2Text Lite"
-        textSize = 24f
-        setTextColor(Color.parseColor("#C084FC"))
-        gravity = Gravity.CENTER
-    }
+        db_path = selection[0]
+        output_path = os.path.join(os.path.dirname(db_path), "export.txt")
 
-    val pickBtn = Button(this).apply {
-        text = "Выбрать файл"
-        setBackgroundColor(Color.parseColor("#7C3AED"))
-        setTextColor(Color.WHITE)
-    }
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
 
-    val convertBtn = Button(this).apply {
-        text = "Конвертировать"
-        setBackgroundColor(Color.parseColor("#9333EA"))
-        setTextColor(Color.WHITE)
-    }
+        result = []
 
-    status = TextView(this).apply {
-        text = "Ожидание..."
-        setTextColor(Color.LTGRAY)
-        gravity = Gravity.CENTER
-    }
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
 
-    val footer = TextView(this).apply {
-        text = "creator: @xeexile"
-        textSize = 12f
-        setTextColor(Color.GRAY)
-        gravity = Gravity.CENTER
-    }
+        for table in tables:
+            name = table[0]
+            result.append(f"\n=== TABLE: {name} ===\n")
 
-    mainLayout.addView(title)
-    mainLayout.addView(pickBtn)
-    mainLayout.addView(convertBtn)
-    mainLayout.addView(status)
+            cursor.execute(f"PRAGMA table_info({name})")
+            cols = [c[1] for c in cursor.fetchall()]
+            result.append(" | ".join(cols))
 
-    val spacer = Space(this).apply {
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            0,
-            1f
-        )
-    }
+            cursor.execute(f"SELECT * FROM {name}")
+            rows = cursor.fetchall()
 
-    mainLayout.addView(spacer)
-    mainLayout.addView(footer)
+            for row in rows:
+                result.append(" | ".join(str(x) if x else "NULL" for x in row))
 
-    setContentView(mainLayout)
+        conn.close()
 
-    pickBtn.setOnClickListener {
-        val intent = Intent(Intent.ACTION_GET_CONTENT)
-        intent.type = "*/*"
-        startActivityForResult(intent, 1)
-    }
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(result))
 
-    convertBtn.setOnClickListener {
-        dbUri?.let { uri ->
-            val file = File(cacheDir, "temp.db")
-            contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
+        self.label.text = f"Готово:\n{output_path}"
 
-            val outFile = File(getExternalFilesDir(null), "output.txt")
-            exportDatabaseToTxt(file.absolutePath, outFile.absolutePath)
 
-            status.text = "Готово: ${outFile.absolutePath}"
-        } ?: run {
-            status.text = "Сначала выбери файл"
-        }
-    }
-}
+class MyApp(App):
+    def build(self):
+        return Converter()
 
-override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-    super.onActivityResult(requestCode, resultCode, data)
-    if (requestCode == 1 && resultCode == Activity.RESULT_OK) {
-        dbUri = data?.data
-        status.text = "Файл выбран"
-    }
-}
 
-private fun exportDatabaseToTxt(dbPath: String, outputPath: String) {
-    val db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY)
-    val file = File(outputPath)
-    val writer = file.bufferedWriter()
-
-    val cursorTables = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'", null)
-
-    while (cursorTables.moveToNext()) {
-        val tableName = cursorTables.getString(0)
-        writer.write("TABLE: $tableName\n")
-
-        val cursor = db.rawQuery("SELECT * FROM $tableName", null)
-        val columns = cursor.columnNames
-
-        writer.write(columns.joinToString(", ") + "\n")
-
-        while (cursor.moveToNext()) {
-            val row = columns.map { col ->
-                val index = cursor.getColumnIndex(col)
-                if (index >= 0) cursor.getString(index) else ""
-            }
-            writer.write(row.joinToString(", ") + "\n")
-        }
-
-        writer.write("\n\n")
-        cursor.close()
-    }
-
-    cursorTables.close()
-    writer.close()
-    db.close()
-}
-
-}
+if __name__ == "__main__":
+    MyApp().run()
