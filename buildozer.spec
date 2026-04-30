@@ -3,9 +3,9 @@ title = SQLite2TXT
 package.name = sqlite2txt
 package.domain = org.example
 
-source.include_exts = py,png,jpg,kv
+source.include_exts = py
 
-requirements = python3,kivy,plyer
+requirements = python3,kivy,plyer,sqlite3
 
 orientation = portrait
 
